@@ -1,10 +1,12 @@
-FROM oracle/graalvm-ce:19.2.1 as graalvm
+FROM oracle/graalvm-ce:20.0.0-java11 as graalvm
 ARG JAR_FILE
 ARG BUILD_DIR
 ADD ${BUILD_DIR}/${JAR_FILE} /home/app/mongonaut.jar
 WORKDIR /home/app
 RUN gu install native-image && \
-    native-image --no-server \
+    curl -L -o musl.tar.gz https://github.com/gradinac/musl-bundle-example/releases/download/v1.0/musl.tar.gz && \
+    tar xvzf musl.tar.gz && \
+    native-image --no-server --static -H:UseMuslC=bundle/ \
     --initialize-at-run-time="io.micronaut.configuration.mongo.reactive.test.AbstractMongoProcessFactory, \
 	com.mongodb.UnixServerAddress,com.mongodb.internal.connection.SnappyCompressor, \
 	io.micronaut.tracing.brave.BraveTracerFactory, \
@@ -14,9 +16,8 @@ RUN gu install native-image && \
 	io.micronaut.tracing.instrument.rxjava.RxJava1TracingInstrumentation" \
 	--initialize-at-build-time=io.micrometer.core,io.micrometer.prometheus,io.micrometer.shaded.org.pcollections \
     --class-path /home/app/mongonaut.jar
-FROM frolvlad/alpine-glibc
+FROM scratch
 EXPOSE 8080
 COPY --from=graalvm /home/app/mongonaut .
-COPY --from=graalvm /opt/graalvm-ce-19.2.1/jre/lib/amd64/libsunec.so .
 ENTRYPOINT ["./mongonaut"]
 
